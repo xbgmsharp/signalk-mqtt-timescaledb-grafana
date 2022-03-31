@@ -1,0 +1,151 @@
+version: '3.9'
+
+services:
+
+  signalk:
+    image: signalk/signalk-server:master
+    container_name: signalk-server
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - /etc/resolv.conf:/etc/resolv.conf:ro
+      - $PWD/iot-cloud/signalk-data:/home/node/.signalk
+    entrypoint: /home/node/signalk/bin/signalk-server --sample-nmea0183-data
+    environment:
+      - DEBUG=signalk-to-mqtt
+    networks:
+      - iot
+    depends_on:
+      - mqtt
+    logging:
+      options:
+        max-size: 10m
+
+  mqtt:
+    image: eclipse-mosquitto
+    container_name: mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - /etc/resolv.conf:/etc/resolv.conf:ro
+      - $PWD/iot-cloud/mosquitto-data/data:/mosquitto/data
+      - $PWD/iot-cloud/mosquitto-data/log:/mosquitto/log
+      - $PWD/iot-cloud/mosquitto/config:/mosquitto/config
+    networks:
+      - iot
+    logging:
+      options:
+        max-size: 10m
+
+  mqtt-to-timescaledb:
+    image: mqtt-to-timescaledb
+    build:
+        context: $PWD/mqtt_to_timescaledb
+        dockerfile: Dockerfile
+    container_name: mqtt-to-timescaledb
+    restart: unless-stopped
+    volumes:
+      - /etc/resolv.conf:/etc/resolv.conf:ro
+      - $PWD/mqtt_to_timescaledb:/app
+    environment:
+      - DATABASE=example
+    networks:
+      - iot
+    depends_on:
+      - mqtt
+      - timescaledb
+    logging:
+      options:
+        max-size: 10m
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg14
+    container_name: timescaledb
+    restart: unless-stopped
+    volumes:
+      - /etc/resolv.conf:/etc/resolv.conf:ro
+      - $PWD/iot-cloud/timescaledb-data/data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=username
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=example
+      - TIMESCALEDB_TELEMETRY=off
+    networks:
+      - iot
+    logging:
+      options:
+        max-size: 10m
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    volumes:
+      - /etc/resolv.conf:/etc/resolv.conf:ro
+      - $PWD/iot-cloud/grafana-data/data:/var/lib/grafana
+      - $PWD/iot-cloud/grafana-data/log:/var/log/grafana
+      - $PWD/iot-cloud/grafana/config:/etc/grafana
+    ports:
+      - "3001:3000"
+    networks:
+      - iot
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=password
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SMTP_ENABLED=false
+    logging:
+      options:
+        max-size: 10m
+
+  vuejs:
+    image: vuejs
+    build:
+        context: .
+        dockerfile: $HOME/vue-monitor/Dockerfile
+    container_name: vuejs
+    restart: unless-stopped
+    volumes:
+      - /etc/resolv.conf:/etc/resolv.conf:ro
+      - $HOME/vue-monitor:/app
+    entrypoint: npm run dev -- --port=3000 --host=0.0.0.0
+    ports:
+      - "8080:3000"
+    networks:
+      - iot
+    logging:
+      options:
+        max-size: 10m
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    restart: unless-stopped
+    volumes:
+      - /etc/resolv.conf:/etc/resolv.conf:ro
+      - $PWD/iot-cloud/pgadmin-data/data:/var/lib/pgadmin
+    ports:
+      - "5050:80"
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=postgres@localhost.com
+      - PGADMIN_DEFAULT_PASSWORD=password
+    networks:
+      - iot
+    depends_on:
+      - timescaledb
+    logging:
+      options:
+        max-size: 10m
+
+networks:
+  iot:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.30.0.0/24
+          gateway: 172.30.0.1
