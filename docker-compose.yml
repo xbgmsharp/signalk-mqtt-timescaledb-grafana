@@ -40,18 +40,45 @@ services:
       options:
         max-size: 10m
 
-  mqtt-to-timescaledb:
-    image: mqtt-to-timescaledb
+  mqtt-to-timescaledb-py:
+    image: mqtt-to-timescaledb-py
     build:
         context: $PWD/mqtt_to_timescaledb
-        dockerfile: Dockerfile
-    container_name: mqtt-to-timescaledb
+        dockerfile: Dockerfile-py
+    container_name: mqtt-to-timescaledb-py
     restart: unless-stopped
     volumes:
       - /etc/resolv.conf:/etc/resolv.conf:ro
       - $PWD/mqtt_to_timescaledb:/app
     environment:
       - DATABASE=example
+      - HOST=172.30.0.1
+      - USER=username
+      - PASSWORD=password
+    networks:
+      - iot
+    depends_on:
+      - mqtt
+      - timescaledb
+    logging:
+      options:
+        max-size: 10m
+
+  mqtt-to-timescaledb-js:
+    image: mqtt-to-timescaledb-js
+    build:
+        context: $PWD/mqtt_to_timescaledb
+        dockerfile: Dockerfile-js
+    container_name: mqtt-to-timescaledb-js
+    restart: unless-stopped
+    volumes:
+      - /etc/resolv.conf:/etc/resolv.conf:ro
+      - $PWD/mqtt_to_timescaledb:/app
+    environment:
+      - DATABASE=example
+      - HOST=172.30.0.1
+      - USER=username
+      - PASSWORD=password
     networks:
       - iot
     depends_on:
